@@ -2,6 +2,7 @@ import argparse
 import time
 import json
 import csv
+import re
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -14,24 +15,28 @@ with open('facebook_credentials.txt') as file:
 
 
 def _extract_post_text(item):
-    actualPosts = item.find_all(attrs={"data-testid": "post_message"})
+    actualPosts = item.find_all(class_ = "kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x c1et5uql ii04i59q")
     text = ""
     if actualPosts:
         for posts in actualPosts:
-            paragraphs = posts.find_all('p')
-            text = ""
-            for index in range(0, len(paragraphs)):
-                text += paragraphs[index].text
+            text = posts.text
     return text
 
 
 def _extract_link(item):
-    postLinks = item.find_all(class_="_6ks")
+    postLinks = item.find_all(class_="jpp8pzdo")
     link = ""
     for postLink in postLinks:
-        link = postLink.find('a').get('href')
+        link = postLink.get('href')
     return link
 
+def _extract_likes(item):
+    likes = item.find_all(class_="gpro0wi8 cwj9ozl2 bzsjyuwj ja2t1vim")
+    text=""
+    if likes:
+        for like in likes:
+            text = like.text
+    return text
 
 def _extract_post_id(item):
     postIds = item.find_all(class_="_5pcq")
@@ -42,50 +47,53 @@ def _extract_post_id(item):
 
 
 def _extract_image(item):
-    postPictures = item.find_all(class_="scaledImageFitWidth img")
+    postPictures = item.find_all(class_="oajrlxb2 gs1a9yip g5ia77u1 mtkw9kbi tlpljxtp qensuy8j ppp5ayq2 goun2846 ccm00jje s44p3ltw mk2mc5f4 rt8b4zig n8ej3o3l agehan2d sk4xxmp2 rq0escxv nhd2j8a9 mg4g778l pfnyh3mw p7hjln8o kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x tgvbjcpo hpfvmrgz jb3vyjys rz4wbd8a qt6c0cv9 a8nywdso l9j0dhe7 i1ao9s8h esuyzwwr f1sip0of du4w35lb n00je7tq arfg74bv qs9ysxi8 k77z8yql btwxx1t3 abiwlrkh p8dawk7l lzcic4wl a8c37x1j tm8avpzi")
     image = ""
     for postPicture in postPictures:
-        image = postPicture.get('src')
+        image = postPicture.get('href')
     return image
 
 
 def _extract_shares(item):
-    postShares = item.find_all(class_="_4vn1")
+    postShares = item.find_all(class_="d2edcug0 hpfvmrgz qv66sw1b c1et5uql oi732d6d ik7dh3pa ht8s03o8 a8c37x1j fe6kdd0r mau55g9w c8b282yb keod5gw0 nxhoafnm aigsh9s9 d9wwppkn iv3no6db jq4qci2q a3bd9o3v b1v8xokw m9osqain")
     shares = ""
     for postShare in postShares:
-
         x = postShare.string
-        if x is not None:
-            x = x.split(">", 1)
-            shares = x
+        if x.find("Shares") != -1:
+            shares = x.replace(" Shares","")
         else:
             shares = "0"
     return shares
 
 
 def _extract_comments(item):
-    postComments = item.findAll("div", {"class": "_4eek"})
+    postComments = item.findAll(class_="b3i9ofy5 e72ty7fz qlfml3jp inkptoze qmr60zad rq0escxv oo9gr5id q9uorilb kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x d2edcug0 jm1wdb64 l9j0dhe7 l3itjdph qv66sw1b")
     comments = dict()
     # print(postDict)
+    count=0
     for comment in postComments:
-        if comment.find(class_="_6qw4") is None:
+        if comment.find(class_="kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x c1et5uql") is None:
             continue
+        count=count+1
+        comments[count] = dict()
 
-        commenter = comment.find(class_="_6qw4").text
-        comments[commenter] = dict()
+        comment_author = comment.find(
+            class_="d2edcug0 hpfvmrgz qv66sw1b c1et5uql oi732d6d ik7dh3pa ht8s03o8 a8c37x1j fe6kdd0r mau55g9w c8b282yb keod5gw0 nxhoafnm aigsh9s9 d9wwppkn mdeji52x e9vueds3 j5wam9gi lrazzd5p oo9gr5id")
+        if comment_author is not None:
+            comments[count]["author"] = comment_author.text
 
-        comment_text = comment.find("span", class_="_3l3x")
-
+        comment_text = comment.find(class_="kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x c1et5uql")
         if comment_text is not None:
-            comments[commenter]["text"] = comment_text.text
+            comments[count]["text"] = comment_text.text
 
-        comment_link = comment.find(class_="_ns_")
-        if comment_link is not None:
-            comments[commenter]["link"] = comment_link.get("href")
 
-        comment_pic = comment.find(class_="_2txe")
-        if comment_pic is not None:
-            comments[commenter]["image"] = comment_pic.find(class_="img").get("src")
+        #comment_link = comment.find(class_="_ns_")
+        #if comment_link is not None:
+        #    comments[count]["link"] = comment_link.get("href")
+
+        #comment_pic = comment.find(class_="_2txe")
+        #if comment_pic is not None:
+        #    comments[count]["image"] = comment_pic.find(class_="img").get("src")
 
         commentList = item.find('ul', {'class': '_7791'})
         if commentList:
@@ -171,16 +179,17 @@ def _extract_html(bs_data):
     #Add to check
     with open('./bs.html',"w", encoding="utf-8") as file:
         file.write(str(bs_data.prettify()))
-
-    k = bs_data.find_all(class_="_5pcr userContentWrapper")
+    k = bs_data.find_all(class_="rq0escxv l9j0dhe7 du4w35lb hybvsw6c io0zqebd m5lcvass fbipl8qg nwvqtn77 k4urcfbm ni8dbmo4 stjgntxs sbcfpzgs")
     postBigDict = list()
-
     for item in k:
         postDict = dict()
         postDict['Post'] = _extract_post_text(item)
-        postDict['Link'] = _extract_link(item)
-        postDict['PostId'] = _extract_post_id(item)
-        postDict['Image'] = _extract_image(item)
+        if postDict["Post"] == '':
+            continue
+        #postDict['Link'] = _extract_link(item)
+        postDict['Likes'] = _extract_likes(item)
+        #postDict['PostId'] = _extract_post_id(item)
+        #postDict['Image'] = _extract_image(item)
         postDict['Shares'] = _extract_shares(item)
         postDict['Comments'] = _extract_comments(item)
         # postDict['Reaction'] = _extract_reaction(item)
@@ -198,8 +207,8 @@ def _login(browser, email, password):
     browser.maximize_window()
     browser.find_element_by_name("email").send_keys(email)
     browser.find_element_by_name("pass").send_keys(password)
-    browser.find_element_by_id('loginbutton').click()
-    time.sleep(5)
+    browser.find_element_by_name('login').click()
+    time.sleep(1)
 
 
 def _count_needed_scrolls(browser, infinite_scroll, numOfPost):
@@ -226,7 +235,7 @@ def _scroll(browser, infinite_scroll, lenOfPage):
 
         # wait for the browser to load, this time can be changed slightly ~3 seconds with no difference, but 5 seems
         # to be stable enough
-        time.sleep(5)
+        time.sleep(4)
 
         if infinite_scroll:
             lenOfPage = browser.execute_script(
@@ -317,63 +326,9 @@ def extract(page, numOfPost, infinite_scroll=False, scrape_comment=False):
 
     # Now that the page is fully scrolled, grab the source code.
     source_data = browser.page_source
-
     # Throw your source into BeautifulSoup and start parsing!
     bs_data = bs(source_data, 'html.parser')
-
     postBigDict = _extract_html(bs_data)
     browser.close()
 
     return postBigDict
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Facebook Page Scraper")
-    required_parser = parser.add_argument_group("required arguments")
-    required_parser.add_argument('-page', '-p', help="The Facebook Public Page you want to scrape", required=True)
-    required_parser.add_argument('-len', '-l', help="Number of Posts you want to scrape", type=int, required=True)
-    optional_parser = parser.add_argument_group("optional arguments")
-    optional_parser.add_argument('-infinite', '-i',
-                                 help="Scroll until the end of the page (1 = infinite) (Default is 0)", type=int,
-                                 default=0)
-    optional_parser.add_argument('-usage', '-u', help="What to do with the data: "
-                                                      "Print on Screen (PS), "
-                                                      "Write to Text File (WT) (Default is WT)", default="CSV")
-
-    optional_parser.add_argument('-comments', '-c', help="Scrape ALL Comments of Posts (y/n) (Default is n). When "
-                                                         "enabled for pages where there are a lot of comments it can "
-                                                         "take a while", default="No")
-    args = parser.parse_args()
-
-    infinite = False
-    if args.infinite == 1:
-        infinite = True
-
-    scrape_comment = False
-    if args.comments == 'y':
-        scrape_comment = True
-
-    postBigDict = extract(page=args.page, numOfPost=args.len, infinite_scroll=infinite, scrape_comment=scrape_comment)
-
-
-    #TODO: rewrite parser
-    if args.usage == "WT":
-        with open('output.txt', 'w') as file:
-            for post in postBigDict:
-                file.write(json.dumps(post))  # use json load to recover
-
-    elif args.usage == "CSV":
-        with open('data.csv', 'w',) as csvfile:
-           writer = csv.writer(csvfile)
-           #writer.writerow(['Post', 'Link', 'Image', 'Comments', 'Reaction'])
-           writer.writerow(['Post', 'Link', 'Image', 'Comments', 'Shares'])
-
-           for post in postBigDict:
-              writer.writerow([post['Post'], post['Link'],post['Image'], post['Comments'], post['Shares']])
-              #writer.writerow([post['Post'], post['Link'],post['Image'], post['Comments'], post['Reaction']])
-
-    else:
-        for post in postBigDict:
-            print(post)
-
-    print("Finished")
